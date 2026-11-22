@@ -68,10 +68,18 @@ function resolveWikilinksAndCitations(
 ): string {
   const codePlaceholders: string[] = [];
 
+  const hrefToSources = computeRelativeHref(
+    currentPage.outRelHtmlPath,
+    "citations/sources.html"
+  );
+
   let processed = markdown.replace(/```[\s\S]*?```|`[^`\n]+`/g, (match) => {
     if (/^`\[@[A-Za-z0-9_:-]+\]`$/.test(match)) {
       const key = match.slice(3, -2);
-      return `<code id="cite-${key}" class="font-mono">[@${key}]</code>`;
+      if (currentPage.repoRelPath === "citations/sources.md") {
+        return `<code id="cite-${key}" class="font-mono font-semibold">[@${key}]</code>`;
+      }
+      return `<a href="${hrefToSources}#cite-${key}" class="font-mono text-sm">[@${key}]</a>`;
     }
     if (
       currentPage.repoRelPath === "citations/sources.md" &&
@@ -129,11 +137,6 @@ function resolveWikilinksAndCitations(
   });
 
   // Resolve [@citekey] and [@key1; @key2] citations
-  const hrefToSources = computeRelativeHref(
-    currentPage.outRelHtmlPath,
-    "citations/sources.html"
-  );
-
   processed = processed.replace(
     /\[(@[A-Za-z0-9_:-]+(?:\s*;\s*@[A-Za-z0-9_:-]+)*)\]/g,
     (_full, inner: string) => {

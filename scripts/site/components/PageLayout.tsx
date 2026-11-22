@@ -33,10 +33,10 @@ export function PageLayout(props: {
           <input id="zmem-drawer" type="checkbox" class="drawer-toggle" />
 
           <div class="drawer-content flex flex-col min-h-screen w-full">
-            <Header homeHref={homeHref} repoRelPath={page.repoRelPath} />
+            <Header currentPage={page} homeHref={homeHref} />
 
             <div class="flex-1 flex w-full">
-              <main class="flex-1 min-w-0 w-full px-6 sm:px-10 lg:px-14 py-10">
+              <main class="flex-1 min-w-0 w-full px-6 sm:px-10 lg:px-14 py-8">
                 <ArticleHeader page={page} />
 
                 <article
@@ -55,7 +55,11 @@ export function PageLayout(props: {
             </div>
           </div>
 
-          <Sidebar currentPage={page} navGroups={navGroups} />
+          <Sidebar
+            currentPage={page}
+            navGroups={navGroups}
+            homeHref={homeHref}
+          />
         </div>
 
         {/* Render LaTeX math formulas via KaTeX */}
