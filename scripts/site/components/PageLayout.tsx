@@ -17,27 +17,30 @@ export function PageLayout(props: {
   const fm = page.frontmatter;
 
   return (
-    <html lang="en" data-theme="night" class="scroll-smooth">
+    <html lang="en" class="scroll-smooth">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>{`${fm.title} — zmem Research Knowledge Base`}</title>
+        <title>{`${fm.title} — zmem Research`}</title>
         <link rel="stylesheet" href={cssHref} />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+        />
       </head>
       <body class="bg-base-100 text-base-content antialiased min-h-screen">
-        {/* DaisyUI CSS-only responsive drawer */}
         <div class="drawer lg:drawer-open">
           <input id="zmem-drawer" type="checkbox" class="drawer-toggle" />
 
-          <div class="drawer-content flex flex-col min-h-screen">
-            <Header homeHref={homeHref} />
+          <div class="drawer-content flex flex-col min-h-screen w-full">
+            <Header homeHref={homeHref} repoRelPath={page.repoRelPath} />
 
-            <div class="flex-1 flex justify-between max-w-[1400px] w-full mx-auto">
-              <main class="flex-1 min-w-0 px-4 sm:px-8 lg:px-12 py-8 max-w-4xl">
+            <div class="flex-1 flex w-full">
+              <main class="flex-1 min-w-0 w-full px-6 sm:px-10 lg:px-14 py-8">
                 <ArticleHeader page={page} />
 
                 <article
-                  class="prose max-w-none prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-primary hover:prose-a:underline prose-code:bg-base-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-table:text-xs prose-th:bg-base-200 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2"
+                  class="doc-prose"
                   dangerouslySetInnerHTML={{ __html: page.htmlBody ?? "" }}
                 />
 
@@ -55,13 +58,41 @@ export function PageLayout(props: {
           <Sidebar currentPage={page} navGroups={navGroups} />
         </div>
 
+        {/* Render LaTeX math formulas via KaTeX */}
+        <script
+          defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        />
+        <script
+          defer
+          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+document.addEventListener("DOMContentLoaded", function() {
+  if (window.renderMathInElement) {
+    window.renderMathInElement(document.body, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "$", right: "$", display: false }
+      ],
+      throwOnError: false
+    });
+  }
+});
+`,
+          }}
+        />
+
         {page.htmlBody?.includes('class="mermaid') && (
           <script
             type="module"
             dangerouslySetInnerHTML={{
               __html: `
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({ startOnLoad: true, theme: isDark ? 'dark' : 'default' });
 `,
             }}
           />

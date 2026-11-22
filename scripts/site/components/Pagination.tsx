@@ -16,15 +16,13 @@ export function Pagination(props: {
             currentPage.outRelHtmlPath,
             prevPage.outRelHtmlPath
           )}
-          class="card card-compact bg-base-200 hover:bg-base-300 border border-base-300 transition-colors"
+          class="group rounded border border-base-300 bg-base-200/50 hover:border-primary/50 px-5 py-4 transition-colors"
         >
-          <div class="card-body">
-            <div class="text-xs font-mono text-base-content/60">
-              ← Previous ({prevPage.frontmatter.id})
-            </div>
-            <div class="text-sm font-semibold text-base-content">
-              {prevPage.frontmatter.title}
-            </div>
+          <div class="text-xs font-mono text-base-content/60 mb-1">
+            ← {prevPage.frontmatter.id}
+          </div>
+          <div class="text-sm font-semibold text-base-content group-hover:text-primary">
+            {prevPage.frontmatter.title}
           </div>
         </a>
       ) : (
@@ -37,15 +35,13 @@ export function Pagination(props: {
             currentPage.outRelHtmlPath,
             nextPage.outRelHtmlPath
           )}
-          class="card card-compact bg-base-200 hover:bg-base-300 border border-base-300 text-right transition-colors"
+          class="group rounded border border-base-300 bg-base-200/50 hover:border-primary/50 px-5 py-4 text-right transition-colors"
         >
-          <div class="card-body items-end">
-            <div class="text-xs font-mono text-base-content/60">
-              Next ({nextPage.frontmatter.id}) →
-            </div>
-            <div class="text-sm font-semibold text-base-content">
-              {nextPage.frontmatter.title}
-            </div>
+          <div class="text-xs font-mono text-base-content/60 mb-1">
+            {nextPage.frontmatter.id} →
+          </div>
+          <div class="text-sm font-semibold text-base-content group-hover:text-primary">
+            {nextPage.frontmatter.title}
           </div>
         </a>
       ) : (

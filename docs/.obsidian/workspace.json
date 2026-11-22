@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "INDEX.md",
+                "file": "research/01-linux-mm-and-zram-internals.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "INDEX"
+              "title": "01-linux-mm-and-zram-internals"
             }
           }
         ]
@@ -190,6 +190,13 @@
   },
   "active": "61be6e4e08067b20",
   "lastOpenFiles": [
+    "research/03-algorithms-and-entropy-filtering.md",
+    "research/04-tiering-coalescing-and-async-reclaim.md",
+    "research/05-rust-for-linux-block-layer.md",
+    "research/06-benchmarking-and-methodology.md",
+    "CHANGELOG.md",
+    "GLOSSARY.md",
+    "INDEX.md",
     "architecture/overview-and-dataflow.md",
     "architecture/c-ops-table-boundary.md",
     "architecture/allocator-and-reclaim-safety.md",
@@ -197,15 +204,9 @@
     "adr/001-rust-blk-mq-entry-point.md",
     "adr/003-swappable-policy-traits.md",
     "research/02-production-memory-compression.md",
-    "research/03-algorithms-and-entropy-filtering.md",
-    "research/04-tiering-coalescing-and-async-reclaim.md",
-    "research/05-rust-for-linux-block-layer.md",
-    "research/06-benchmarking-and-methodology.md",
-    "INDEX.md",
     "experiments/README.md",
     "architecture/swappable-policy-traits.md",
     "research/01-linux-mm-and-zram-internals.md",
-    "GLOSSARY.md",
     "templates/research-chapter.md",
     "templates/paper-note.md",
     "templates/experiment.md",
