@@ -176,7 +176,11 @@ function collectMarkdownFiles(dir: string): string[] {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...collectMarkdownFiles(fullPath));
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".md") &&
+      !/^\d{4}-\d{2}-\d{2}\.md$/.test(entry.name)
+    ) {
       results.push(fullPath);
     }
   }

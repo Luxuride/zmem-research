@@ -106,27 +106,50 @@ export function buildNavigationGroups(pages: PageEntry[]): NavGroup[] {
   const filterBy = (predicate: (p: PageEntry) => boolean) =>
     pages.filter(predicate);
 
+  const overviewOrder = [
+    "README.md",
+    "docs/INDEX.md",
+    "docs/GLOSSARY.md",
+    "docs/CHANGELOG.md",
+  ];
   const overviewItems = filterBy((p) =>
-    [
-      "README.md",
-      "docs/INDEX.md",
-      "docs/GLOSSARY.md",
-      "docs/CHANGELOG.md",
-    ].includes(p.repoRelPath)
+    overviewOrder.includes(p.repoRelPath)
+  ).sort(
+    (a, b) =>
+      overviewOrder.indexOf(a.repoRelPath) -
+      overviewOrder.indexOf(b.repoRelPath)
   );
+
   const researchItems = filterBy((p) =>
     p.repoRelPath.startsWith("docs/research/")
-  );
+  ).sort((a, b) => a.repoRelPath.localeCompare(b.repoRelPath));
+
+  const archOrder = [
+    "docs/architecture/overview-and-dataflow.md",
+    "docs/architecture/c-ops-table-boundary.md",
+    "docs/architecture/swappable-policy-traits.md",
+    "docs/architecture/allocator-and-reclaim-safety.md",
+  ];
   const archItems = filterBy((p) =>
     p.repoRelPath.startsWith("docs/architecture/")
-  );
-  const adrItems = filterBy((p) => p.repoRelPath.startsWith("docs/adr/"));
+  ).sort((a, b) => {
+    const ia = archOrder.indexOf(a.repoRelPath);
+    const ib = archOrder.indexOf(b.repoRelPath);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    return a.repoRelPath.localeCompare(b.repoRelPath);
+  });
+
+  const adrItems = filterBy((p) =>
+    p.repoRelPath.startsWith("docs/adr/")
+  ).sort((a, b) => a.repoRelPath.localeCompare(b.repoRelPath));
+
   const expItems = filterBy((p) =>
     p.repoRelPath.startsWith("docs/experiments/")
-  );
+  ).sort((a, b) => a.repoRelPath.localeCompare(b.repoRelPath));
+
   const citationItems = filterBy((p) =>
     p.repoRelPath.startsWith("citations/")
-  );
+  ).sort((a, b) => a.repoRelPath.localeCompare(b.repoRelPath));
 
   return [
     {

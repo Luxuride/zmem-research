@@ -7,12 +7,16 @@ pnpm-debug.log*
 dist/
 .tsx/
 
-# Obsidian local workspace state (keep shared configuration if added, ignore volatile workspace layouts)
+# Obsidian local workspace state (keep shared configuration if added, ignore volatile workspace layouts & auto daily notes)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/workspace*.json
 .obsidian/cache
+docs/.obsidian/workspace*.json
+docs/.obsidian/cache
+docs/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md
 .trash/
+docs/.trash/
 
 # OS & Editor metadata
 .DS_Store

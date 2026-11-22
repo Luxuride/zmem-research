@@ -43,24 +43,32 @@ export function Sidebar(props: {
                   {group.title}
                 </summary>
                 <ul class="mt-1 space-y-0.5">
-                  {group.items.map((item) => {
+                  {group.items.map((item, idx) => {
                     const isActive =
                       item.outRelHtmlPath === currentPage.outRelHtmlPath;
                     const href = computeRelativeHref(
                       currentPage.outRelHtmlPath,
                       item.outRelHtmlPath
                     );
+                    const numPrefix = String(idx + 1).padStart(2, "0") + ".";
+                    const cleanTitle = item.frontmatter.title.replace(
+                      /^ADR-\d+:\s*/i,
+                      ""
+                    );
                     return (
                       <li key={item.outRelHtmlPath}>
                         <a
                           href={href}
-                          class={`text-sm leading-snug py-2 ${
+                          class={`flex items-baseline gap-2 text-sm leading-snug py-2 ${
                             isActive
                               ? "active font-semibold border-l-2 border-primary"
                               : ""
                           }`}
                         >
-                          {item.frontmatter.title}
+                          <span class="font-mono text-xs text-base-content/60 shrink-0">
+                            {numPrefix}
+                          </span>
+                          <span>{cleanTitle}</span>
                         </a>
                       </li>
                     );
