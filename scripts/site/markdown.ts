@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import katex from "katex";
 import { Marked, Renderer } from "marked";
 import { computeRelativeHref } from "./discovery.js";
 import type { PageEntry, TocHeading } from "./types.js";
@@ -67,6 +68,7 @@ function resolveWikilinksAndCitations(
   lookup: Map<string, PageEntry>
 ): string {
   const codePlaceholders: string[] = [];
+  const mathPlaceholders: string[] = [];
 
   const hrefToSources = computeRelativeHref(
     currentPage.outRelHtmlPath,
@@ -95,6 +97,26 @@ function resolveWikilinksAndCitations(
     codePlaceholders.push(match);
     return `@@CODE_PLACEHOLDER_${idx}@@`;
   });
+
+  // Render LaTeX math ($$...$$ and $...$) via KaTeX BEFORE marked strips backslashes (like \_)
+  processed = processed.replace(
+    /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g,
+    (_full, displayExpr?: string, inlineExpr?: string) => {
+      const isDisplay = displayExpr !== undefined;
+      const expr = (isDisplay ? displayExpr : inlineExpr) ?? "";
+      const renderedMath = katex.renderToString(expr.trim(), {
+        displayMode: isDisplay,
+        throwOnError: true,
+      });
+      const idx = mathPlaceholders.length;
+      mathPlaceholders.push(
+        isDisplay
+          ? `<div class="my-4 overflow-x-auto">${renderedMath}</div>`
+          : renderedMath
+      );
+      return `@@MATH_PLACEHOLDER_${idx}@@`;
+    }
+  );
 
   // Resolve Obsidian [[wikilinks]]
   processed = processed.replace(/\[\[([^\[\]]+)\]\]/g, (_full, rawInner) => {
@@ -154,10 +176,15 @@ function resolveWikilinksAndCitations(
     }
   );
 
-  return processed.replace(
-    /@@CODE_PLACEHOLDER_(\d+)@@/g,
-    (_m, idxStr) => codePlaceholders[Number(idxStr)]
-  );
+  return processed
+    .replace(
+      /@@MATH_PLACEHOLDER_(\d+)@@/g,
+      (_m, idxStr) => mathPlaceholders[Number(idxStr)]
+    )
+    .replace(
+      /@@CODE_PLACEHOLDER_(\d+)@@/g,
+      (_m, idxStr) => codePlaceholders[Number(idxStr)]
+    );
 }
 
 function transformAlertsAndAssumptions(

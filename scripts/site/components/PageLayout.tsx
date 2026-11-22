@@ -62,33 +62,6 @@ export function PageLayout(props: {
           />
         </div>
 
-        {/* Render LaTeX math formulas via KaTeX */}
-        <script
-          defer
-          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
-        />
-        <script
-          defer
-          src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-document.addEventListener("DOMContentLoaded", function() {
-  if (window.renderMathInElement) {
-    window.renderMathInElement(document.body, {
-      delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "$", right: "$", display: false }
-      ],
-      throwOnError: false
-    });
-  }
-});
-`,
-          }}
-        />
-
         {page.htmlBody?.includes('class="mermaid') && (
           <script
             type="module"
