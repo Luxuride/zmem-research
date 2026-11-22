@@ -15,7 +15,10 @@ export function Sidebar(props: {
         aria-label="close sidebar"
         class="drawer-overlay"
       />
-      <aside class="bg-base-200 text-base-content w-80 h-full overflow-y-auto border-r border-base-300">
+      <aside
+        id="zmem-sidebar"
+        class="bg-base-200 text-base-content w-80 h-full overflow-y-auto border-r border-base-300"
+      >
         <div class="h-16 px-5 border-b border-base-300 flex items-center justify-between">
           <a
             href={homeHref}
@@ -36,9 +39,9 @@ export function Sidebar(props: {
           class="menu menu-md px-3 py-4 gap-1 w-full"
           aria-label="Knowledge Base Navigation"
         >
-          {navGroups.map((group) => (
+          {navGroups.map((group, groupIdx) => (
             <li key={group.title}>
-              <details open>
+              <details open data-nav-group={String(groupIdx)}>
                 <summary class="font-mono text-xs font-bold uppercase tracking-wider text-base-content/80">
                   {group.title}
                 </summary>
@@ -79,6 +82,46 @@ export function Sidebar(props: {
           ))}
         </ul>
       </aside>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+(function() {
+  var sidebar = document.getElementById("zmem-sidebar");
+  if (!sidebar) return;
+  try {
+    var closedGroups = JSON.parse(sessionStorage.getItem("zmem-nav-closed") || "[]");
+    if (Array.isArray(closedGroups)) {
+      closedGroups.forEach(function(id) {
+        var el = sidebar.querySelector('details[data-nav-group="' + id + '"]');
+        if (el) el.removeAttribute("open");
+      });
+    }
+    var savedScroll = sessionStorage.getItem("zmem-sidebar-scroll");
+    if (savedScroll !== null) {
+      sidebar.scrollTop = parseInt(savedScroll, 10) || 0;
+    } else {
+      var activeLink = sidebar.querySelector("a.active");
+      if (activeLink && activeLink.scrollIntoView) {
+        activeLink.scrollIntoView({ block: "nearest" });
+      }
+    }
+    sidebar.addEventListener("scroll", function() {
+      sessionStorage.setItem("zmem-sidebar-scroll", String(sidebar.scrollTop));
+    }, { passive: true });
+    sidebar.querySelectorAll("details[data-nav-group]").forEach(function(det) {
+      det.addEventListener("toggle", function() {
+        var closed = [];
+        sidebar.querySelectorAll("details[data-nav-group]").forEach(function(d) {
+          if (!d.hasAttribute("open")) closed.push(d.getAttribute("data-nav-group"));
+        });
+        sessionStorage.setItem("zmem-nav-closed", JSON.stringify(closed));
+      });
+    });
+  } catch (e) {}
+})();
+`,
+        }}
+      />
     </div>
   );
 }
