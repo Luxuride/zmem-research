@@ -36,11 +36,11 @@ export function PageLayout(props: {
             <Header homeHref={homeHref} repoRelPath={page.repoRelPath} />
 
             <div class="flex-1 flex w-full">
-              <main class="flex-1 min-w-0 w-full px-6 sm:px-10 lg:px-14 py-8">
+              <main class="flex-1 min-w-0 w-full px-6 sm:px-10 lg:px-14 py-10">
                 <ArticleHeader page={page} />
 
                 <article
-                  class="doc-prose"
+                  class="prose max-w-none"
                   dangerouslySetInnerHTML={{ __html: page.htmlBody ?? "" }}
                 />
 

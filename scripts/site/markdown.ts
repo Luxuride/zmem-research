@@ -8,36 +8,36 @@ const ALERT_STYLES: Record<
   { borderClass: string; titleClass: string; label: string }
 > = {
   NOTE: {
-    borderClass: "border-l-info",
+    borderClass: "border-info",
     titleClass: "text-info",
     label: "Note",
   },
   TIP: {
-    borderClass: "border-l-success",
+    borderClass: "border-success",
     titleClass: "text-success",
     label: "Tip",
   },
   IMPORTANT: {
-    borderClass: "border-l-primary",
+    borderClass: "border-primary",
     titleClass: "text-primary",
     label: "Important",
   },
   WARNING: {
-    borderClass: "border-l-warning",
+    borderClass: "border-warning",
     titleClass: "text-warning",
     label: "Warning",
   },
   CAUTION: {
-    borderClass: "border-l-error",
+    borderClass: "border-error",
     titleClass: "text-error",
     label: "Caution",
   },
 };
 
 const ASSUMPTION_BADGE_STYLES: Record<string, string> = {
-  Active: "border-warning/50 text-warning bg-warning/10",
-  Verified: "border-success/50 text-success bg-success/10",
-  Refuted: "border-error/50 text-error bg-error/10",
+  Active: "badge-warning badge-outline",
+  Verified: "badge-success badge-outline",
+  Refuted: "badge-error badge-outline",
 };
 
 function decodeHtmlEntities(str: string): string {
@@ -71,7 +71,7 @@ function resolveWikilinksAndCitations(
   let processed = markdown.replace(/```[\s\S]*?```|`[^`\n]+`/g, (match) => {
     if (/^`\[@[A-Za-z0-9_:-]+\]`$/.test(match)) {
       const key = match.slice(3, -2);
-      return `<code id="cite-${key}" class="font-mono text-sm">[@${key}]</code>`;
+      return `<code id="cite-${key}" class="font-mono">[@${key}]</code>`;
     }
     if (
       currentPage.repoRelPath === "citations/sources.md" &&
@@ -81,7 +81,7 @@ function resolveWikilinksAndCitations(
       const subFolder = filename.endsWith(".pdf") ? "pdfs" : "html";
       const targetRel = `citations/${subFolder}/${filename}`;
       const href = computeRelativeHref(currentPage.outRelHtmlPath, targetRel);
-      return `<a href="${href}" class="font-mono text-sm underline">${filename}</a>`;
+      return `<a href="${href}" class="link link-primary font-mono">${filename}</a>`;
     }
     const idx = codePlaceholders.length;
     codePlaceholders.push(match);
@@ -143,9 +143,9 @@ function resolveWikilinksAndCitations(
         .filter(Boolean);
       const links = keys.map(
         (k) =>
-          `<a href="${hrefToSources}#cite-${k}" class="font-mono text-sm text-primary hover:underline">@${k}</a>`
+          `<a href="${hrefToSources}#cite-${k}" class="link link-primary font-mono no-underline hover:underline">@${k}</a>`
       );
-      return `<span class="font-mono text-sm text-base-content/70">[${links.join(
+      return `<span class="font-mono text-base-content/75">[${links.join(
         "; "
       )}]</span>`;
     }
@@ -184,10 +184,10 @@ function transformAlertsAndAssumptions(
       const style = ALERT_STYLES[kind] ?? ALERT_STYLES.NOTE;
       const renderedInner = inlineParser.parse(alertBody.join("\n")) as string;
       out.push(
-        `<aside class="my-6 border-l-4 ${style.borderClass} bg-base-200 px-5 py-4 rounded-r">`,
-        `<div class="text-xs font-mono font-bold uppercase tracking-wider ${style.titleClass} mb-1.5">${style.label}</div>`,
-        `<div class="text-base leading-relaxed space-y-2">${renderedInner}</div>`,
-        `</aside>`
+        `<div role="note" class="my-6 border-l-4 ${style.borderClass} bg-base-200 px-5 py-4 rounded-r-lg">`,
+        `<div class="text-xs font-mono font-bold uppercase tracking-wider ${style.titleClass} mb-1">${style.label}</div>`,
+        `<div class="text-base leading-relaxed">${renderedInner}</div>`,
+        `</div>`
       );
       continue;
     }
@@ -204,7 +204,7 @@ function transformAlertsAndAssumptions(
       const cls =
         ASSUMPTION_BADGE_STYLES[state] ?? ASSUMPTION_BADGE_STYLES.Active;
       out.push(
-        `- <span class="inline-block font-mono text-xs font-semibold px-2 py-0.5 rounded border ${cls} mr-1.5">${state}</span> ${rest}`
+        `- <span class="badge ${cls} badge-sm font-mono font-semibold mr-1.5">${state}</span> ${rest}`
       );
       i++;
       continue;
@@ -237,11 +237,10 @@ export function renderPageMarkdown(
       headings.push({ level: depth, text: plainText, slug });
     }
     const Tag = `h${depth}`;
-    // If heading already contains an <a> link, append a clickable '#' anchor; otherwise make the entire heading a clickable link to #slug
     if (renderedInline.includes("<a ")) {
-      return `<${Tag} id="${slug}" class="group scroll-mt-16">${renderedInline} <a href="#${slug}" class="text-base-content/40 hover:text-primary ml-1.5 font-normal no-underline" aria-label="Link to section">#</a></${Tag}>\n`;
+      return `<${Tag} id="${slug}" class="group scroll-mt-20">${renderedInline} <a href="#${slug}" class="text-base-content/40 hover:text-primary ml-1.5 font-normal no-underline" aria-label="Link to section">#</a></${Tag}>\n`;
     }
-    return `<${Tag} id="${slug}" class="group scroll-mt-16"><a href="#${slug}" class="heading-link">${renderedInline} <span class="text-base-content/30 group-hover:text-primary ml-1 font-normal">#</span></a></${Tag}>\n`;
+    return `<${Tag} id="${slug}" class="group scroll-mt-20"><a href="#${slug}" class="heading-link">${renderedInline} <span class="text-base-content/30 group-hover:text-primary ml-1 font-normal">#</span></a></${Tag}>\n`;
   };
 
   renderer.table = function (token) {
@@ -259,7 +258,7 @@ export function renderPageMarkdown(
       }
       bodyHtml += `<tr>${rowHtml}</tr>`;
     }
-    return `<div class="my-6 overflow-x-auto"><table class="w-full"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>\n`;
+    return `<div class="my-6 overflow-x-auto"><table class="table table-zebra w-full"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>\n`;
   };
 
   renderer.code = ({ text, lang }) => {
@@ -269,13 +268,13 @@ export function renderPageMarkdown(
       .replace(/>/g, "&gt;");
 
     if (lang === "mermaid") {
-      return `<div class="my-6 rounded border border-base-300 bg-base-200/60 p-5 overflow-x-auto"><pre class="mermaid text-center text-sm">${escaped}</pre></div>\n`;
+      return `<div class="my-6 rounded-lg border border-base-300 bg-base-200 p-5 overflow-x-auto not-prose"><pre class="mermaid text-center text-sm">${escaped}</pre></div>\n`;
     }
 
     const langHeader = lang
-      ? `<div class="px-4 py-1.5 bg-base-200 border-b border-base-300 text-xs font-mono text-base-content/60">${lang}</div>`
+      ? `<div class="px-4 py-2 bg-base-300 text-xs font-mono text-base-content/70">${lang}</div>`
       : "";
-    return `<div class="my-5 rounded border border-base-300 bg-base-200/50 overflow-hidden">${langHeader}<pre class="p-4 overflow-x-auto text-sm font-mono leading-relaxed text-base-content"><code>${escaped}</code></pre></div>\n`;
+    return `<div class="my-5 rounded-lg border border-base-300 bg-base-200 overflow-hidden not-prose">${langHeader}<pre class="p-4 overflow-x-auto text-sm font-mono leading-relaxed text-base-content"><code>${escaped}</code></pre></div>\n`;
   };
 
   const markedInstance = new Marked({ renderer, gfm: true, breaks: false });
