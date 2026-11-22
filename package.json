@@ -1,0 +1,27 @@
+{
+  "name": "zmem-research",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Obsidian-compatible research and architecture knowledge base for zmem (Rust-for-Linux in-kernel transient memory compression)",
+  "type": "module",
+  "scripts": {
+    "check": "tsx scripts/check_consistency.ts",
+    "gen": "tsx scripts/gen.ts",
+    "new-adr": "tsx scripts/gen.ts new-adr",
+    "new-exp": "tsx scripts/gen.ts new-exp",
+    "sync-indexes": "tsx scripts/gen.ts sync-indexes",
+    "build": "tsx scripts/build_site.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.15",
+    "@types/node": "^22.0.0",
+    "daisyui": "^4.12.23",
+    "marked": "^15.0.0",
+    "postcss": "^8.4.49",
+    "preact": "^10.25.0",
+    "preact-render-to-string": "^6.5.11",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

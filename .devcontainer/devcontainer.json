@@ -1,0 +1,24 @@
+{
+  "name": "zmem-research (Docs & Knowledge Base)",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "files.eol": "\n",
+        "editor.formatOnSave": true,
+        "markdown.extension.toc.levels": "2..4"
+      },
+      "extensions": [
+        "yzhang.markdown-all-in-one",
+        "bierner.markdown-mermaid",
+        "james-yu.latex-workshop",
+        "dbaeumer.vscode-eslint"
+      ]
+    }
+  },
+  "remoteUser": "node"
+}

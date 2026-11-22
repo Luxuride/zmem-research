@@ -1,0 +1,44 @@
+# Node / TypeScript tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+.tsx/
+
+# Obsidian local workspace state (keep shared configuration if added, ignore volatile workspace layouts)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspace*.json
+.obsidian/cache
+.trash/
+
+# OS & Editor metadata
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# Python / Legacy caches
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local build / preview artifacts (LaTeX, Pandoc, PDF previews)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+build/
+out/

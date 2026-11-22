@@ -1,0 +1,4 @@
+[submodule "citations/pdfs"]
+	path = citations/pdfs
+	url = git@github.com:Luxuride/zmem-research-pdfs.git
+	update = none

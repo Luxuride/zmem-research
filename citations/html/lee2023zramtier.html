@@ -1,0 +1,2070 @@
+<!DOCTYPE html><html><head><meta charset='utf-8'><title>zram Multi-Algorithm Recompression (CONFIG_ZRAM_MULTI_COMP)</title></head><body><pre>Linux Kernel Mainline zram Multi-Algorithm Recompression (CONFIG_ZRAM_MULTI_COMP)
+Authors: Sergey Senozhatsky, Minchan Kim
+Source: Documentation/admin-guide/blockdev/zram.rst &amp; drivers/block/zram/zram_drv.c
+
+=== 1. Kernel Documentation: Recompression ===
+Linux Kernel Documentation: zram and zsmalloc (Page 1/16)
+========================================
+zram: Compressed RAM-based block devices
+========================================
+Introduction
+============
+The zram module creates RAM-based block devices named /dev/zram&lt;id&gt;
+(&lt;id&gt; = 0, 1, ...). Pages written to these disks are compressed and stored
+in memory itself. These disks allow very fast I/O and compression provides
+good amounts of memory savings. Some of the use cases include /tmp storage,
+use as swap disks, various caches under /var and maybe many more. :)
+Statistics for individual zram devices are exported through sysfs nodes at
+/sys/block/zram&lt;id&gt;/
+Usage
+=====
+There are several ways to configure and manage zram device(-s):
+a) using zram and zram_control sysfs attributes
+b) using zramctl utility, provided by util-linux (util-linux@vger.kernel.org).
+In this document we will describe only ’manual’ zram configuration steps,
+IOW, zram and zram_control sysfs attributes.
+In order to get a better idea about zramctl please consult util-linux
+documentation, zramctl man-page or ‘zramctl --help‘. Please be informed
+that zram maintainers do not develop/maintain util-linux or zramctl, should
+you have any questions please contact util-linux@vger.kernel.org
+Following shows a typical sequence of steps for using zram.
+WARNING
+=======
+For the sake of simplicity we skip error checking parts in most of the
+examples below. However, it is your sole responsibility to handle errors.
+zram sysfs attributes always return negative values in case of errors.
+The list of possible return codes:
+======== =============================================================
+-EBUSY
+an attempt to modify an attribute that cannot be changed once
+the device has been initialised. Please reset device first.
+-ENOMEM
+zram was not able to allocate enough memory to fulfil your
+needs.
+-EINVAL
+invalid input has been provided.
+-EAGAIN
+re-try operation later (e.g. when attempting to run recompress
+and writeback simultaneously).
+======== =============================================================
+If you use ’echo’, the returned value is set by the ’echo’ utility,
+and, in general case, something like::
+echo foo &gt; /sys/block/zram0/comp_algorithm
+if [ $? -ne 0 ]; then
+
+Linux Kernel Documentation: zram and zsmalloc (Page 2/16)
+handle_error
+fi
+should suffice.
+Load Module
+===========
+::
+modprobe zram num_devices=4
+This creates 4 devices: /dev/zram{0,1,2,3}
+num_devices parameter is optional and tells zram how many devices should be
+pre-created. Default: 1.
+Select compression algorithm
+============================
+Using comp_algorithm device attribute one can see available and
+currently selected (shown in square brackets) compression algorithms,
+or change the selected compression algorithm (once the device is initialised
+there is no way to change compression algorithm).
+Examples::
+#show supported compression algorithms
+cat /sys/block/zram0/comp_algorithm
+lzo [lz4]
+#select lzo compression algorithm
+echo lzo &gt; /sys/block/zram0/comp_algorithm
+For the time being, the ‘comp_algorithm‘ content shows only compression
+algorithms that are supported by zram.
+Set compression algorithm parameters: Optional
+==============================================
+Compression algorithms may support specific parameters which can be
+tweaked for particular dataset. ZRAM has an ‘algorithm_params‘ device
+attribute which provides a per-algorithm params configuration.
+For example, several compression algorithms support ‘level‘ parameter.
+In addition, certain compression algorithms support pre-trained dictionaries,
+which significantly change algorithms’ characteristics. In order to configure
+compression algorithm to use external pre-trained dictionary, pass full
+path to the ‘dict‘ along with other parameters::
+#pass path to pre-trained zstd dictionary
+echo &quot;algo=zstd dict=/etc/dictionary&quot; &gt; /sys/block/zram0/algorithm_params
+#pass path to pre-trained zstd dictionary and compression level
+echo &quot;algo=zstd level=8 dict=/etc/dictionary&quot; &gt; \
+/sys/block/zram0/algorithm_params
+#same, but using algorithm priority
+
+Linux Kernel Documentation: zram and zsmalloc (Page 3/16)
+echo &quot;algo=zstd priority=1&quot; &gt; /sys/block/zram0/recomp_algorithm
+echo &quot;priority=1 dict=/etc/dictionary&quot; &gt; \
+/sys/block/zram0/algorithm_params
+Each write to ‘algorithm_params‘ replaces the entire set of parameters of
+the corresponding algorithm, parameters that are not listed in the write
+are reset to their default values. Configure all of the parameters of an
+algorithm in one write::
+#WRONG: the second write resets level back to its default value
+echo &quot;algo=zstd level=8&quot; &gt; /sys/block/zram0/algorithm_params
+echo &quot;algo=zstd dict=/etc/dictionary&quot; &gt; /sys/block/zram0/algorithm_params
+#RIGHT
+echo &quot;algo=zstd level=8 dict=/etc/dictionary&quot; &gt; \
+/sys/block/zram0/algorithm_params
+Select the compression algorithm before configuring its parameters. The
+parameters of one algorithm are not necessarily valid for another one, so
+changing the algorithm of a particular priority resets that priority’s
+parameters::
+#WRONG: comp_algorithm write resets the previously configured level
+echo &quot;level=8&quot; &gt; /sys/block/zram0/algorithm_params
+echo zstd &gt; /sys/block/zram0/comp_algorithm
+#RIGHT
+echo zstd &gt; /sys/block/zram0/comp_algorithm
+echo &quot;algo=zstd level=8&quot; &gt; /sys/block/zram0/algorithm_params
+Parameters are algorithm specific: not all algorithms support pre-trained
+dictionaries, not all algorithms support ‘level‘. Furthermore, for certain
+algorithms ‘level‘ controls the compression level (the higher the value the
+better the compression ratio, it even can take negatives values for some
+algorithms), for other algorithms ‘level‘ is acceleration level (the higher
+the value the lower the compression ratio).
+Parameters are handed over to the compression algorithm when the device is
+initialised, hence invalid parameters (or parameters that the selected
+algorithm does not support) are reported by the ‘disksize‘ write, and not
+by the ‘algorithm_params‘ write that has configured them.
+Set Disksize
+============
+Set disk size by writing the value to sysfs node ’disksize’.
+The value can be either in bytes or you can use mem suffixes.
+Examples::
+# Initialize /dev/zram0 with 50MB disksize
+echo $((50*1024*1024)) &gt; /sys/block/zram0/disksize
+# Using mem suffixes
+echo 256K &gt; /sys/block/zram0/disksize
+echo 512M &gt; /sys/block/zram0/disksize
+echo 1G &gt; /sys/block/zram0/disksize
+Note:
+
+Linux Kernel Documentation: zram and zsmalloc (Page 4/16)
+There is little point creating a zram of greater than twice the size of memory
+since we expect a 2:1 compression ratio. Note that zram uses about 0.1% of the
+size of the disk when not in use so a huge zram is wasteful.
+Set memory limit: Optional
+==========================
+Set memory limit by writing the value to sysfs node ’mem_limit’.
+The value can be either in bytes or you can use mem suffixes.
+In addition, you could change the value in runtime.
+Examples::
+# limit /dev/zram0 with 50MB memory
+echo $((50*1024*1024)) &gt; /sys/block/zram0/mem_limit
+# Using mem suffixes
+echo 256K &gt; /sys/block/zram0/mem_limit
+echo 512M &gt; /sys/block/zram0/mem_limit
+echo 1G &gt; /sys/block/zram0/mem_limit
+# To disable memory limit
+echo 0 &gt; /sys/block/zram0/mem_limit
+Activate
+========
+::
+mkswap /dev/zram0
+swapon /dev/zram0
+mkfs.ext4 /dev/zram1
+mount /dev/zram1 /tmp
+Add/remove zram devices
+=======================
+zram provides a control interface, which enables dynamic (on-demand) device
+addition and removal.
+In order to add a new /dev/zramX device, perform a read operation on the hot_add
+attribute. This will return either the new device’s device id (meaning that you
+can use /dev/zram&lt;id&gt;) or an error code.
+Example::
+cat /sys/class/zram-control/hot_add
+1
+To remove the existing /dev/zramX device (where X is a device id)
+execute::
+echo X &gt; /sys/class/zram-control/hot_remove
+Stats
+=====
+Per-device statistics are exported as various nodes under /sys/block/zram&lt;id&gt;/
+
+Linux Kernel Documentation: zram and zsmalloc (Page 5/16)
+
+A brief description of exported device attributes follows. For more details
+please read Documentation/ABI/testing/sysfs-block-zram.
+====================== ====== ===============================================
+Name
+access
+description
+====================== ====== ===============================================
+disksize
+RW show and set the device’s disk size
+initstate
+RO shows the initialization state of the device
+reset
+WO trigger device reset
+mem_used_max
+WO reset the ‘mem_used_max‘ counter (see later)
+mem_limit
+WO specifies the maximum amount of memory ZRAM can
+use to store the compressed data
+writeback_limit
+WO specifies the maximum amount of write IO zram
+can write out to backing device as 4KB unit
+writeback_limit_enable RW show and set writeback_limit feature
+writeback_batch_size
+RW show and set maximum number of in-flight
+writeback operations
+compressed_writeback
+RW show and set compressed writeback feature
+comp_algorithm
+RW show and change the compression algorithm
+algorithm_params
+WO setup compression algorithm parameters
+compact
+WO trigger memory compaction
+debug_stat
+RO this file is used for zram debugging purposes
+backing_dev
+RW set up backend storage for zram to write out
+idle
+WO mark allocated slot as idle
+====================== ====== ===============================================
+User space is advised to use the following files to read the device statistics.
+File /sys/block/zram&lt;id&gt;/stat
+Represents block layer statistics. Read Documentation/block/stat.rst for
+details.
+File /sys/block/zram&lt;id&gt;/io_stat
+The stat file represents device’s I/O statistics not accounted by block
+layer and, thus, not available in zram&lt;id&gt;/stat file. It consists of a
+single line of text and contains the following stats separated by
+whitespace:
+=============
+failed_reads
+failed_writes
+invalid_io
+notify_free
+
+=============================================================
+The number of failed reads
+The number of failed writes
+The number of non-page-size-aligned I/O requests
+Depending on device usage scenario it may account
+a) the number of pages freed because of swap slot free
+notifications
+b) the number of pages freed because of
+REQ_OP_DISCARD requests sent by bio. The former ones are
+sent to a swap block device when a swap slot is freed,
+which implies that this disk is being used as a swap disk.
+
+=============
+
+The latter ones are sent by filesystem mounted with
+discard option, whenever some data blocks are getting
+discarded.
+=============================================================
+
+Linux Kernel Documentation: zram and zsmalloc (Page 6/16)
+
+File /sys/block/zram&lt;id&gt;/mm_stat
+The mm_stat file represents the device’s mm statistics. It consists of a single
+line of text and contains the following stats separated by whitespace:
+================ =============================================================
+orig_data_size
+uncompressed size of data stored in this disk.
+Unit: bytes
+compr_data_size compressed size of data stored in this disk
+mem_used_total
+the amount of memory allocated for this disk. This
+includes allocator fragmentation and metadata overhead,
+allocated for this disk. So, allocator space efficiency
+can be calculated using compr_data_size and this statistic.
+Unit: bytes
+mem_limit
+the maximum amount of memory ZRAM can use to store
+the compressed data
+mem_used_max
+the maximum amount of memory zram has consumed to
+store the data
+same_pages
+the number of same element filled pages written to this disk.
+No memory is allocated for such pages.
+pages_compacted the number of pages freed during compaction
+huge_pages
+the number of incompressible pages
+huge_pages_since the number of incompressible pages since zram set up
+================ =============================================================
+File /sys/block/zram&lt;id&gt;/bd_stat
+The bd_stat file represents a device’s backing device statistics. It consists of
+a single line of text and contains the following stats separated by whitespace:
+============== =============================================================
+bd_count
+size of data written in backing device.
+Unit: 4K bytes
+bd_reads
+the number of reads from backing device
+Unit: 4K bytes
+bd_writes the number of writes to backing device
+Unit: 4K bytes
+============== =============================================================
+Deactivate
+==========
+::
+swapoff /dev/zram0
+umount /dev/zram1
+Reset
+=====
+Write any positive value to ’reset’ sysfs node::
+echo 1 &gt; /sys/block/zram0/reset
+echo 1 &gt; /sys/block/zram1/reset
+This frees all the memory allocated for the given device and
+resets the disksize to zero. You must set the disksize again
+
+Linux Kernel Documentation: zram and zsmalloc (Page 7/16)
+before reusing the device.
+Optional Feature
+================
+IDLE pages tracking
+------------------zram has built-in support for idle pages tracking (that is, allocated but
+not used pages). This feature is useful for e.g. zram writeback and
+recompression. In order to mark pages as idle, execute the following command::
+echo all &gt; /sys/block/zramX/idle
+This will mark all allocated zram pages as idle. The idle mark will be
+removed only when the page (block) is accessed (e.g. overwritten or freed).
+Additionally, when CONFIG_ZRAM_TRACK_ENTRY_ACTIME is enabled, pages can be
+marked as idle based on how many seconds have passed since the last access to
+a particular zram page::
+echo 86400 &gt; /sys/block/zramX/idle
+In this example, all pages which haven’t been accessed in more than 86400
+seconds (one day) will be marked idle.
+writeback
+--------With CONFIG_ZRAM_WRITEBACK, zram can write idle/incompressible page
+to backing storage rather than keeping it in memory.
+To use the feature, admin should set up backing device via::
+echo /dev/sda5 &gt; /sys/block/zramX/backing_dev
+before disksize setting. It supports only partitions at this moment.
+If admin wants to use incompressible page writeback, they could do it via::
+echo huge &gt; /sys/block/zramX/writeback
+Admin can request writeback of idle pages at right timing via::
+echo idle &gt; /sys/block/zramX/writeback
+With the command, zram will writeback idle pages from memory to the storage.
+Additionally, if a user choose to writeback only huge and idle pages
+this can be accomplished with::
+echo huge_idle &gt; /sys/block/zramX/writeback
+If a user chooses to writeback only incompressible pages (pages that none of
+algorithms can compress) this can be accomplished with::
+echo incompressible &gt; /sys/block/zramX/writeback
+If an admin wants to write a specific page in zram device to the backing device,
+they could write a page index into the interface::
+
+Linux Kernel Documentation: zram and zsmalloc (Page 8/16)
+echo &quot;page_index=1251&quot; &gt; /sys/block/zramX/writeback
+In Linux 6.16 this interface underwent some rework. First, the interface
+now supports ‘key=value‘ format for all of its parameters (‘type=huge_idle‘,
+etc.) Second, the support for ‘page_indexes‘ was introduced, which specify
+‘LOW-HIGH‘ range (or ranges) of pages to be written-back. This reduces the
+number of syscalls, but more importantly this enables optimal post-processing
+target selection strategy. Usage example::
+echo &quot;type=idle&quot; &gt; /sys/block/zramX/writeback
+echo &quot;page_indexes=1-100 page_indexes=200-300&quot; &gt; \
+/sys/block/zramX/writeback
+We also now permit multiple page_index params per call and a mix of
+single pages and page ranges::
+echo page_index=42 page_index=99 page_indexes=100-200 \
+page_indexes=500-700 &gt; /sys/block/zramX/writeback
+If there are lots of write IO with flash device, potentially, it has
+flash wearout problem so that admin needs to design write limitation
+to guarantee storage health for entire product life.
+To overcome the concern, zram supports &quot;writeback_limit&quot; feature.
+The &quot;writeback_limit_enable&quot;’s default value is 0 so that it doesn’t limit
+any writeback. IOW, if admin wants to apply writeback budget, they should
+enable writeback_limit_enable via::
+$ echo 1 &gt; /sys/block/zramX/writeback_limit_enable
+Once writeback_limit_enable is set, zram doesn’t allow any writeback
+until admin sets the budget via /sys/block/zramX/writeback_limit.
+(If admin doesn’t enable writeback_limit_enable, writeback_limit’s value
+assigned via /sys/block/zramX/writeback_limit is meaningless.)
+If admin wants to limit writeback as per-day 400M, they could do it
+like below::
+$ MB_SHIFT=20
+$ 4K_SHIFT=12
+$ echo $((400&lt;&lt;MB_SHIFT&gt;&gt;4K_SHIFT)) &gt; \
+/sys/block/zram0/writeback_limit.
+$ echo 1 &gt; /sys/block/zram0/writeback_limit_enable
+If admins want to allow further write again once the budget is exhausted,
+they could do it like below::
+$ echo $((400&lt;&lt;MB_SHIFT&gt;&gt;4K_SHIFT)) &gt; \
+/sys/block/zram0/writeback_limit
+If an admin wants to see the remaining writeback budget since last set::
+$ cat /sys/block/zramX/writeback_limit
+If an admin wants to disable writeback limit, they could do::
+$ echo 0 &gt; /sys/block/zramX/writeback_limit_enable
+
+Linux Kernel Documentation: zram and zsmalloc (Page 9/16)
+
+The writeback_limit count will reset whenever you reset zram (e.g.,
+system reboot, echo 1 &gt; /sys/block/zramX/reset) so keeping how many of
+writeback happened until you reset the zram to allocate extra writeback
+budget in next setting is user’s job.
+By default zram stores written back pages in decompressed (raw) form, which
+means that writeback operation involves decompression of the page before
+writing it to the backing device. This behavior can be changed by enabling
+‘compressed_writeback‘ feature, which causes zram to write compressed pages
+to the backing device, thus avoiding decompression overhead. To enable
+this feature, execute::
+$ echo yes &gt; /sys/block/zramX/compressed_writeback
+Note that this feature should be configured before the ‘zramX‘ device is
+initialized.
+Depending on backing device storage type, writeback operation may benefit
+from a higher number of in-flight write requests (batched writes). The
+number of maximum in-flight writeback operations can be configured via
+‘writeback_batch_size‘ attribute. To change the default value (which is 32),
+execute::
+$ echo 64 &gt; /sys/block/zramX/writeback_batch_size
+If admin wants to measure writeback count in a certain period, they could
+know it via /sys/block/zram0/bd_stat’s 3rd column.
+recompression
+------------With ‘CONFIG_ZRAM_MULTI_COMP‘, zram can recompress pages using alternative
+(secondary) compression algorithms. The basic idea is that alternative
+compression algorithm can provide better compression ratio at a price of
+(potentially) slower compression/decompression speeds. Alternative compression
+algorithm can, for example, be more successful compressing huge pages (those
+that default algorithm failed to compress). Another application is idle pages
+recompression - pages that are cold and sit in the memory can be recompressed
+using more effective algorithm and, hence, reduce zsmalloc memory usage.
+With ‘CONFIG_ZRAM_MULTI_COMP‘, zram supports up to 4 compression algorithms:
+one primary and up to 3 secondary ones. Primary zram compressor is explained
+in &quot;3) Select compression algorithm&quot;, secondary algorithms are configured
+using recomp_algorithm device attribute.
+Example:::
+#show supported recompression algorithms
+cat /sys/block/zramX/recomp_algorithm
+#1: lzo lzo-rle lz4 lz4hc [zstd]
+#2: lzo lzo-rle lz4 [lz4hc] zstd
+Alternative compression algorithms are sorted by priority. In the example
+above, zstd is used as the first alternative algorithm, which has priority
+of 1, while lz4hc is configured as a compression algorithm with priority 2.
+Alternative compression algorithm’s priority is provided during algorithms
+configuration:::
+
+Linux Kernel Documentation: zram and zsmalloc (Page 10/16)
+
+#select zstd recompression algorithm, priority 1
+echo &quot;algo=zstd priority=1&quot; &gt; /sys/block/zramX/recomp_algorithm
+#select deflate recompression algorithm, priority 2
+echo &quot;algo=deflate priority=2&quot; &gt; /sys/block/zramX/recomp_algorithm
+Another device attribute that ‘CONFIG_ZRAM_MULTI_COMP‘ enables is ‘recompress‘,
+which controls recompression.
+Examples:::
+#IDLE pages recompression is activated by ‘idle‘ mode
+echo &quot;type=idle priority=1&quot; &gt; /sys/block/zramX/recompress
+#HUGE pages recompression is activated by ‘huge‘ mode
+echo &quot;type=huge priority=2&quot; &gt; /sys/block/zram0/recompress
+#HUGE_IDLE pages recompression is activated by ‘huge_idle‘ mode
+echo &quot;type=huge_idle priority=1&quot; &gt; /sys/block/zramX/recompress
+The number of idle pages can be significant, so user-space can pass a size
+threshold (in bytes) to the recompress knob: zram will recompress only pages
+of equal or greater size:::
+#recompress all pages larger than 3000 bytes
+echo &quot;threshold=3000 priority=1&quot; &gt; /sys/block/zramX/recompress
+#recompress idle pages larger than 2000 bytes
+echo &quot;type=idle threshold=2000 priority=1&quot; &gt; \
+/sys/block/zramX/recompress
+It is also possible to limit the number of pages zram re-compression will
+attempt to recompress:::
+echo &quot;type=huge_idle priority=1 max_pages=42&quot; &gt; \
+/sys/block/zramX/recompress
+It is advised to always specify ‘priority‘ parameter. While it is also
+possible to specify ‘algo‘ parameter, so that ‘zram‘ will use algorithm’s
+name to determine the priority, it is not recommended, since it can lead to
+unexpected results when the same algorithm is configured with different
+priorities (e.g. different parameters). ‘priority‘ is the only way to
+guarantee that the expected algorithm will be used.
+memory tracking
+===============
+With CONFIG_ZRAM_MEMORY_TRACKING, user can know information of the
+zram block. It could be useful to catch cold or incompressible
+pages of the process with*pagemap.
+If you enable the feature, you could see block state via
+/sys/kernel/debug/zram/zram0/block_state&quot;. The output is as follows::
+300
+301
+302
+
+75.033841 .wh...
+63.806904 s.....
+63.806919 ..hi..
+
+Linux Kernel Documentation: zram and zsmalloc (Page 11/16)
+303
+304
+
+62.801919 ....r.
+146.781902 ..hi.n
+
+First column
+zram’s block index.
+Second column
+access time since the system was booted
+Third column
+state of the block:
+s:
+same page
+w:
+written page to backing store
+h:
+huge page
+i:
+idle page
+r:
+recompressed page (secondary compression algorithm)
+n:
+none (including secondary) of algorithms could compress it
+First line of above example says 300th block is accessed at 75.033841sec
+and the block’s state is huge so it is written back to the backing
+storage. It’s a debugging feature so anyone shouldn’t rely on it to work
+properly.
+Nitin Gupta
+ngupta@vflare.org
+========
+zsmalloc
+========
+This allocator is designed for use with zram. Thus, the allocator is
+supposed to work well under low memory conditions. In particular, it
+never attempts higher order page allocation which is very likely to
+fail under memory pressure. On the other hand, if we just use single
+(0-order) pages, it would suffer from very high fragmentation -any object of size PAGE_SIZE/2 or larger would occupy an entire page.
+This was one of the major issues with its predecessor (xvmalloc).
+To overcome these issues, zsmalloc allocates a bunch of 0-order pages
+and links them together using various ’struct page’ fields. These linked
+pages act as a single higher-order page i.e. an object can span 0-order
+page boundaries. The code refers to these linked pages as a single entity
+called zspage.
+For simplicity, zsmalloc can only allocate objects of size up to PAGE_SIZE
+since this satisfies the requirements of all its current users (in the
+worst case, page is incompressible and is thus stored &quot;as-is&quot; i.e. in
+uncompressed form). For allocation requests larger than this size, failure
+is returned (see zs_malloc).
+Additionally, zs_malloc() does not return a dereferenceable pointer.
+Instead, it returns an opaque handle (unsigned long) which encodes actual
+location of the allocated object. The reason for this indirection is that
+zsmalloc does not keep zspages permanently mapped since that would cause
+
+Linux Kernel Documentation: zram and zsmalloc (Page 12/16)
+issues on 32-bit systems where the VA region for kernel space mappings
+is very small. So, using the allocated memory should be done through the
+proper handle-based APIs.
+stat
+====
+With CONFIG_ZSMALLOC_STAT, we could see zsmalloc internal information via
+‘‘/sys/kernel/debug/zsmalloc/&lt;user name&gt;‘‘. Here is a sample of stat output::
+# cat /sys/kernel/debug/zsmalloc/zram0/classes
+class
+
+size
+90%
+...
+...
+30
+512
+1
+31
+528
+0
+32
+544
+0
+...
+...
+
+10%
+99%
+
+20%
+30%
+100% obj_allocated
+
+0
+0
+
+12
+414
+
+2
+2
+
+7
+117
+
+6
+1
+
+3
+260
+
+4
+3464
+2
+4154
+4
+4170
+
+40%
+50%
+60%
+70%
+80%
+obj_used pages_used pages_per_zspage freeable
+
+1
+3346
+2
+3793
+1
+3965
+
+0
+
+1
+433
+
+1
+
+0
+536
+
+2
+
+1
+556
+
+class
+index
+size
+object size zspage stores
+10%
+the number of zspages with usage ratio less than 10% (see below)
+20%
+the number of zspages with usage ratio between 10% and 20%
+30%
+the number of zspages with usage ratio between 20% and 30%
+40%
+the number of zspages with usage ratio between 30% and 40%
+50%
+the number of zspages with usage ratio between 40% and 50%
+60%
+the number of zspages with usage ratio between 50% and 60%
+70%
+the number of zspages with usage ratio between 60% and 70%
+80%
+the number of zspages with usage ratio between 70% and 80%
+90%
+the number of zspages with usage ratio between 80% and 90%
+99%
+the number of zspages with usage ratio between 90% and 99%
+100%
+the number of zspages with usage ratio 100%
+obj_allocated
+the number of objects allocated
+obj_used
+the number of objects allocated to the user
+pages_used
+the number of pages allocated for the class
+
+0
+1
+1
+4
+0
+2
+
+0
+14
+0
+44
+0
+26
+
+Linux Kernel Documentation: zram and zsmalloc (Page 13/16)
+pages_per_zspage
+the number of 0-order pages to make a zspage
+freeable
+the approximate number of pages class compaction can free
+Each zspage maintains inuse counter which keeps track of the number of
+objects stored in the zspage. The inuse counter determines the zspage’s
+&quot;fullness group&quot; which is calculated as the ratio of the &quot;inuse&quot; objects to
+the total number of objects the zspage can hold (objs_per_zspage). The
+closer the inuse counter is to objs_per_zspage, the better.
+Internals
+=========
+zsmalloc has 255 size classes, each of which can hold a number of zspages.
+Each zspage can contain up to ZSMALLOC_CHAIN_SIZE physical (0-order) pages.
+The optimal zspage chain size for each size class is calculated during the
+creation of the zsmalloc pool (see calculate_zspage_chain_size()).
+As an optimization, zsmalloc merges size classes that have similar
+characteristics in terms of the number of pages per zspage and the number
+of objects that each zspage can store.
+For instance, consider the following size classes:::
+class
+eable
+...
+94
+0
+100
+0
+...
+
+size
+
+10%
+
+....
+
+100% obj_allocated
+
+obj_used pages_used pages_per_zspage fre
+
+1536
+
+0
+
+....
+
+0
+
+0
+
+0
+
+0
+
+3
+
+1632
+
+0
+
+....
+
+0
+
+0
+
+0
+
+0
+
+2
+
+Size classes #95-99 are merged with size class #100. This means that when we
+need to store an object of size, say, 1568 bytes, we end up using size class
+#100 instead of size class #96. Size class #100 is meant for objects of size
+1632 bytes, so each object of size 1568 bytes wastes 1632-1568=64 bytes.
+Size class #100 consists of zspages with 2 physical pages each, which can
+hold a total of 5 objects. If we need to store 13 objects of size 1568, we
+end up allocating three zspages, or 6 physical pages.
+However, if we take a closer look at size class #96 (which is meant for
+objects of size 1568 bytes) and trace ‘calculate_zspage_chain_size()‘, we
+find that the most optimal zspage configuration for this class is a chain
+of 5 physical pages:::
+pages per zspage
+1
+2
+3
+4
+5
+
+wasted bytes
+960
+352
+1312
+704
+96
+
+used%
+76
+95
+89
+95
+99
+
+This means that a class #96 configuration with 5 physical pages can store 13
+objects of size 1568 in a single zspage, using a total of 5 physical pages.
+
+Linux Kernel Documentation: zram and zsmalloc (Page 14/16)
+This is more efficient than the class #100 configuration, which would use 6
+physical pages to store the same number of objects.
+As the zspage chain size for class #96 increases, its key characteristics
+such as pages per-zspage and objects per-zspage also change. This leads to
+dewer class mergers, resulting in a more compact grouping of classes, which
+reduces memory wastage.
+Let’s take a closer look at the bottom of ‘/sys/kernel/debug/zsmalloc/zramX/classes‘:::
+class
+eable
+...
+202
+0
+254
+0
+...
+
+size
+
+10%
+
+....
+
+100% obj_allocated
+
+obj_used pages_used pages_per_zspage fre
+
+3264
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+4
+
+4096
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+1
+
+Size class #202 stores objects of size 3264 bytes and has a maximum of 4 pages
+per zspage. Any object larger than 3264 bytes is considered huge and belongs
+to size class #254, which stores each object in its own physical page (objects
+in huge classes do not share pages).
+Increasing the size of the chain of zspages also results in a higher watermark
+for the huge size class and fewer huge classes overall. This allows for more
+efficient storage of large objects.
+For zspage chain size of 8, huge class watermark becomes 3632 bytes:::
+class
+eable
+...
+202
+0
+211
+0
+217
+0
+222
+0
+225
+0
+254
+0
+...
+
+size
+
+10%
+
+....
+
+100% obj_allocated
+
+obj_used pages_used pages_per_zspage fre
+
+3264
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+4
+
+3408
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+5
+
+3504
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+6
+
+3584
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+7
+
+3632
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+8
+
+4096
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+1
+
+For zspage chain size of 16, huge class watermark becomes 3840 bytes:::
+class
+eable
+...
+202
+0
+206
+
+size
+
+10%
+
+....
+
+100% obj_allocated
+
+obj_used pages_used pages_per_zspage fre
+
+3264
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+4
+
+3328
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+13
+
+Linux Kernel Documentation: zram and zsmalloc (Page 15/16)
+0
+207
+0
+208
+0
+211
+0
+212
+0
+214
+0
+217
+0
+219
+0
+222
+0
+223
+0
+225
+0
+228
+0
+230
+0
+232
+0
+234
+0
+235
+0
+236
+0
+238
+0
+254
+0
+...
+
+3344
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+9
+
+3360
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+14
+
+3408
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+5
+
+3424
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+16
+
+3456
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+11
+
+3504
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+6
+
+3536
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+13
+
+3584
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+7
+
+3600
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+15
+
+3632
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+8
+
+3680
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+9
+
+3712
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+10
+
+3744
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+11
+
+3776
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+12
+
+3792
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+13
+
+3808
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+14
+
+3840
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+15
+
+4096
+
+0
+
+..
+
+0
+
+0
+
+0
+
+0
+
+1
+
+Overall the combined zspage chain size effect on zsmalloc pool configuration:::
+pages per zspage
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+
+A synthetic test
+
+number of size classes (clusters)
+69
+86
+93
+112
+123
+140
+143
+159
+164
+180
+183
+188
+191
+
+huge size class watermark
+3264
+3408
+3504
+3584
+3632
+3680
+3712
+3744
+3776
+3792
+3808
+3840
+3840
+
+Linux Kernel Documentation: zram and zsmalloc (Page 16/16)
+---------------zram as a build artifacts storage (Linux kernel compilation).
+* ‘CONFIG_ZSMALLOC_CHAIN_SIZE=4‘
+zsmalloc classes stats:::
+class
+reeable
+
+size
+
+...
+Total
+3
+
+10%
+
+....
+
+13
+
+..
+
+100% obj_allocated
+
+51
+
+413836
+
+obj_used pages_used pages_per_zspage f
+
+412973
+
+159955
+
+60
+
+0
+
+zram mm_stat:::
+1691783168 628083717 655175680
+
+0 655175680
+
+34048
+
+34049
+
+* ‘CONFIG_ZSMALLOC_CHAIN_SIZE=8‘
+zsmalloc classes stats:::
+class
+reeable
+
+size
+
+...
+Total
+0
+
+10%
+
+....
+
+18
+
+..
+
+100% obj_allocated
+
+87
+
+414852
+
+obj_used pages_used pages_per_zspage f
+
+412978
+
+156666
+
+60
+
+0
+
+zram mm_stat:::
+1691803648 627793930 641703936
+
+0 641703936
+
+33591
+
+Using larger zspage chains may result in using fewer physical pages, as seen
+in the example where the number of physical pages used decreased from 159955
+to 156666, at the same time maximum zsmalloc pool memory usage went down from
+655175680 to 641703936 bytes.
+However, this advantage may be offset by the potential for increased system
+memory pressure (as some zspages have larger chain sizes) in cases where there
+is heavy internal fragmentation and zspool compaction is unable to relocate
+objects and release zspages. In these cases, it is recommended to decrease
+the limit on the size of the zspage chains (as specified by the
+CONFIG_ZSMALLOC_CHAIN_SIZE option).
+Functions
+=========
+.. kernel-doc:: mm/zsmalloc.c
+
+33591
+
+
+
+=== 2. Mainline Implementation Excerpt (drivers/block/zram/zram_drv.c) ===
+am-&gt;mem_pool);
+	update_used_max(zram, alloced_pages);
+
+	return !zram-&gt;limit_pages || alloced_pages &lt;= zram-&gt;limit_pages;
+}
+
+#if PAGE_SIZE != 4096
+static inline bool is_partial_io(struct bio_vec *bvec)
+{
+	return bvec-&gt;bv_len != PAGE_SIZE;
+}
+#define ZRAM_PARTIAL_IO		1
+#else
+static inline bool is_partial_io(struct bio_vec *bvec)
+{
+	return false;
+}
+#endif
+
+#if defined CONFIG_ZRAM_WRITEBACK || defined CONFIG_ZRAM_MULTI_COMP
+struct zram_pp_slot {
+	unsigned long		index;
+	struct list_head	entry;
+};
+
+/*
+ * A post-processing bucket is, essentially, a size class, this defines
+ * the range (in bytes) of pp-slots sizes in particular bucket.
+ */
+#define PP_BUCKET_SIZE_RANGE	64
+#define NUM_PP_BUCKETS		((PAGE_SIZE / PP_BUCKET_SIZE_RANGE) + 1)
+
+struct zram_pp_ctl {
+	struct list_head	pp_buckets[NUM_PP_BUCKETS];
+};
+
+static struct zram_pp_ctl *init_pp_ctl(void)
+{
+	struct zram_pp_ctl *ctl;
+	u32 idx;
+
+	ctl = kmalloc_obj(*ctl);
+	if (!ctl)
+		return NULL;
+
+	for (idx = 0; idx &lt; NUM_PP_BUCKETS; idx++)
+		INIT_LIST_HEAD(&amp;ctl-&gt;pp_buckets[idx]);
+	return ctl;
+}
+
+static void release_pp_slot(struct zram *zram, struct zram_pp_slot *pps)
+{
+	list_del_init(&amp;pps-&gt;entry);
+
+	slot_lock(zram, pps-&gt;index);
+	clear_slot_flag(zram, pps-&gt;index, ZRAM_PP_SLOT);
+	slot_unlock(zram, pps-&gt;index);
+
+	kfree(pps);
+}
+
+static void release_pp_ctl(struct zram *zram, struct zram_pp_ctl *ctl)
+{
+	u32 idx;
+
+	if (!ctl)
+		return;
+
+	for (idx = 0; idx &lt; NUM_PP_BUCKETS; idx++) {
+		while (!list_empty(&amp;ctl-&gt;pp_buckets[idx])) {
+			struct zram_pp_slot *pps;
+
+			pps = list_first_entry(&amp;ctl-&gt;pp_buckets[idx],
+					       struct zram_pp_slot,
+					       entry);
+			release_pp_slot(zram, pps);
+		}
+	}
+
+	kfree(ctl);
+}
+
+static bool place_pp_slot(struct zram *zram, struct zram_pp_ctl *ctl,
+			  unsigned long index)
+{
+	struct zram_pp_slot *pps;
+	u32 bid;
+
+	pps = kmalloc_obj(*pps, GFP_NOIO | __GFP_NOWARN);
+	if (!pps)
+		return false;
+
+	INIT_LIST_HEAD(&amp;pps-&gt;entry);
+	pps-&gt;index = index;
+
+	bid = get_slot_size(zram, pps-&gt;index) / PP_BUCKET_SIZE_RANGE;
+	list_add(&amp;pps-&gt;entry, &amp;ctl-&gt;pp_buckets[bid]);
+
+	set_slot_flag(zram, pps-&gt;index, ZRAM_PP_SLOT);
+	return true;
+}
+
+static struct zram_pp_slot *select_pp_slot(struct zram_pp_ctl *ctl)
+{
+	struct zram_pp_slot *pps = NULL;
+	s32 idx = NUM_PP_BUCKETS - 1;
+
+	/* The higher the bucket id the more optimal slot post-processing is */
+	while (idx &gt;= 0) {
+		pps = list_first_entry_or_null(&amp;ctl-&gt;pp_buckets[idx],
+					       struct zram_pp_slot,
+					       entry);
+		if (pps)
+			break;
+
+		idx--;
+	}
+	return pps;
+}
+#endif
+
+static inline void zram_fill_page(void *ptr, unsigned long len,
+					unsigned long value)
+{
+	WARN_ON_ONCE(!IS_ALIGNED(len, sizeof(unsigned long)));
+	memset_l(ptr, value, len / sizeof(unsigned long));
+}
+
+static bool page_same_filled(void *ptr, unsigned long *element)
+{
+	unsigned long *page;
+	unsigned long val;
+	unsigned int pos, last_pos = PAGE_SIZE / sizeof(*page) - 1;
+
+	page = (unsigned long *)ptr;
+	val = page[0];
+
+	if (val != page[last_pos])
+		return false;
+
+	for (pos = 1; pos &lt; last_pos; pos++) {
+		if (val != page[pos])
+			return false;
+	}
+
+	*element = val;
+
+	return true;
+}
+
+static ssize_t initstate_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	u32 val;
+	struct zram *zram = dev_to_zram(dev);
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	val = init_done(zram);
+
+	return sysfs_emit(buf, &quot;%u\n&quot;, val);
+}
+
+static ssize_t disksize_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct zram *zram = dev_to_zram(dev);
+
+	return sysfs_emit(buf, &quot;%llu\n&quot;, zram-&gt;disksize);
+}
+
+static ssize_t mem_limit_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t len)
+{
+	u64 limit;
+	char *tmp;
+	struct zram *zram = dev_to_zram(dev);
+
+	limit = memparse(buf, &amp;tmp);
+	if (buf == tmp) /* no chars parsed, invalid input */
+		return -EINVAL;
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	zram-&gt;limit_pages = PAGE_ALIGN(limit) &gt;&gt; PAGE_SHIFT;
+
+	return len;
+}
+
+static ssize_t mem_used_max_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t len)
+{
+	int err;
+	unsigned long val;
+	struct zram *zram = dev_to_zram(dev);
+
+	err = kstrtoul(buf, 10, &amp;val);
+	if (err || val != 0)
+		return -EINVAL;
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	if (init_done(zram)) {
+		atomic_long_set(&amp;zram-&gt;stats.max_used_pages,
+				zs_get_total_pages(zram-&gt;mem_pool));
+	}
+
+	return len;
+}
+
+/*
+ * Mark all pages which are older than or equal to cutoff as IDLE.
+ * Callers should hold the zram init lock in read mode
+ */
+static void mark_idle(struct zram *zram, time64_t cutoff)
+{
+	int is_idle = 1;
+	unsigned long nr_pages = zram-&gt;disksize &gt;&gt; PAGE_SHIFT;
+	unsigned long index;
+
+	for (index = 0; index &lt; nr_pages; index++) {
+		/*
+		 * Do not mark ZRAM_SAME slots as ZRAM_IDLE, because no
+		 * post-processing (recompress, writeback) happens to the
+		 * ZRAM_SAME slot.
+		 *
+		 * And ZRAM_WB slots simply cannot be ZRAM_IDLE.
+		 */
+		slot_lock(zram, index);
+		if (!slot_allocated(zram, index) ||
+		    test_slot_flag(zram, index, ZRAM_WB) ||
+		    test_slot_flag(zram, index, ZRAM_SAME)) {
+			slot_unlock(zram, index);
+			continue;
+		}
+
+#ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
+		is_idle = !cutoff ||
+			cutoff &gt; zram-&gt;table[index].attr.ac_time;
+#endif
+		if (is_idle)
+			set_slot_flag(zram, index, ZRAM_IDLE);
+		else
+			clear_slot_flag(zram, index, ZRAM_IDLE);
+		slot_unlock(zram, index);
+	}
+}
+
+static ssize_t idle_store(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	time64_t cutoff = 0;
+
+	if (!sysfs_streq(buf, &quot;all&quot;)) {
+		/*
+		 * If it did not parse as &#x27;all&#x27; try to treat it as an integer
+		 * when we have memory tracking enabled.
+		 */
+		time64_t uptime;
+		u32 age_sec;
+
+		if (!IS_ENABLED(CONFIG_ZRAM_TRACK_ENTRY_ACTIME) ||
+		    kstrtouint(buf, 0, &amp;age_sec))
+			return -EINVAL;
+
+		/* No slot can be older than the system uptime */
+		uptime = ktime_get_boottime_seconds();
+		if (age_sec &gt;= uptime)
+			return len;
+
+		cutoff = uptime - age_sec;
+	}
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	if (!init_done(zram))
+		return -EINVAL;
+
+	/*
+	 * A cutoff of 0 marks everything as idle, this is the
+	 * &quot;all&quot; behavior.
+	 */
+	mark_idle(zram, cutoff);
+	return len;
+}
+
+#ifdef CONFIG_ZRAM_WRITEBACK
+#define INVALID_BDEV_BLOCK		(~0UL)
+
+static int read_from_zspool_raw(struct zram *zram, struct page *page,
+				unsigned long index);
+static int read_from_zspool(struct zram *zram, struct page *page,
+			    unsigned long index);
+
+struct zram_wb_ctl {
+	/* idle list is accessed only by the writeback task, no concurency */
+	struct list_head idle_reqs;
+	/* done list is accessed concurrently, protect by done_lock */
+	struct list_head done_reqs;
+	wait_queue_head_t done_wait;
+	spinlock_t done_lock;
+	atomic_t num_inflight;
+	struct rcu_head rcu;
+};
+
+struct zram_wb_req {
+	unsigned long blk_idx;
+	struct page *page;
+	struct zram_pp_slot *pps;
+	struct bio_vec bio_vec;
+	struct bio bio;
+
+	struct list_head entry;
+};
+
+struct zram_rb_req {
+	struct work_struct work;
+	struct zram *zram;
+	struct page *page;
+	/* The read bio for backing device */
+	struct bio *bio;
+	unsigned long blk_idx;
+	union {
+		/* The original bio to complete (async read) */
+		struct bio *parent;
+		/* error status (sync read) */
+		int error;
+	};
+	unsigned long index;
+};
+
+#define FOUR_K(x) ((x) * (1 &lt;&lt; (PAGE_SHIFT - 12)))
+static ssize_t bd_stat_show(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct zram *zram = dev_to_zram(dev);
+	ssize_t ret;
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	ret = sysfs_emit(buf,
+			 &quot;%8llu %8llu %8llu\n&quot;,
+			 FOUR_K((u64)atomic64_read(&amp;zram-&gt;stats.bd_count)),
+			 FOUR_K((u64)atomic64_read(&amp;zram-&gt;stats.bd_reads)),
+			 FOUR_K((u64)atomic64_read(&amp;zram-&gt;stats.bd_writes)));
+
+	return ret;
+}
+
+static ssize_t compressed_writeback_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	bool val;
+
+	if (kstrtobool(buf, &amp;val))
+		return -EINVAL;
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	if (init_done(zram)) {
+		return -EBUSY;
+	}
+
+	zram-&gt;compressed_wb = val;
+
+	return len;
+}
+
+static ssize_t compressed_writeback_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	bool val;
+	struct zram *zram = dev_to_zram(dev);
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	val = zram-&gt;compressed_wb;
+
+	return sysfs_emit(buf, &quot;%d\n&quot;, val);
+}
+
+static ssize_t writeback_limit_enable_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	u64 val;
+
+	if (kstrtoull(buf, 10, &amp;val))
+		return -EINVAL;
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	zram-&gt;wb_limit_enable = val;
+
+	return len;
+}
+
+static ssize_t writeback_limit_enable_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	bool val;
+	struct zram *zram = dev_to_zram(dev);
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	val = zram-&gt;wb_limit_enable;
+
+	return sysfs_emit(buf, &quot;%d\n&quot;, val);
+}
+
+static ssize_t writeback_limit_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	u64 val;
+
+	if (kstrtoull(buf, 10, &amp;val))
+		return -EINVAL;
+
+	/*
+	 * When the page size is greater than 4KB, if bd_wb_limit is set to
+	 * a value that is not page - size aligned, it will cause value
+	 * wrapping. For example, when the page size is set to 16KB and
+	 * bd_wb_limit is set to 3, a single write - back operation will
+	 * cause bd_wb_limit to become -1. Even more terrifying is that
+	 * bd_wb_limit is an unsigned number.
+	 */
+	val = rounddown(val, PAGE_SIZE / 4096);
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	zram-&gt;bd_wb_limit = val;
+
+	return len;
+}
+
+static ssize_t writeback_limit_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	u64 val;
+	struct zram *zram = dev_to_zram(dev);
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	val = zram-&gt;bd_wb_limit;
+
+	return sysfs_emit(buf, &quot;%llu\n&quot;, val);
+}
+
+static ssize_t writeback_batch_size_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	u32 val;
+
+	if (kstrtouint(buf, 10, &amp;val))
+		return -EINVAL;
+
+	if (!val)
+		return -EINVAL;
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	zram-&gt;wb_batch_size = val;
+
+	return len;
+}
+
+static ssize_t writeback_batch_size_show(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	u32 val;
+	struct zram *zram = dev_to_zram(dev);
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	val = zram-&gt;wb_batch_size;
+
+	return sysfs_emit(buf, &quot;%u\n&quot;, val);
+}
+
+static void reset_bdev(struct zram *zram)
+{
+	if (!zram-&gt;backing_dev)
+		return;
+
+	/* hope filp_close flush all of IO */
+	filp_close(zram-&gt;backing_dev, NULL);
+	zram-&gt;backing_dev = NULL;
+	zram-&gt;bdev = NULL;
+	zram-&gt;disk-&gt;fops = &amp;zram_devops;
+	kvfree(zram-&gt;bitmap);
+	zram-&gt;bitmap = NULL;
+}
+
+static ssize_t backing_dev_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct file *file;
+	struct zram *zram = dev_to_zram(dev);
+	char *p;
+	ssize_t ret;
+
+	guard(rwsem_read)(&amp;zram-&gt;dev_lock);
+	file = zram-&gt;backing_dev;
+	if (!file) {
+		memcpy(buf, &quot;none\n&quot;, 5);
+		return 5;
+	}
+
+	p = file_path(file, buf, PAGE_SIZE - 1);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
+
+	ret = strlen(p);
+	memmove(buf, p, ret);
+	buf[ret++] = &#x27;\n&#x27;;
+	return ret;
+}
+
+static ssize_t backing_dev_store(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t len)
+{
+	char *file_name;
+	size_t sz;
+	struct file *backing_dev = NULL;
+	struct inode *inode;
+	unsigned int bitmap_sz;
+	unsigned long nr_pages, *bitmap = NULL;
+	int err;
+	struct zram *zram = dev_to_zram(dev);
+
+	file_name = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!file_name)
+		return -ENOMEM;
+
+	guard(rwsem_write)(&amp;zram-&gt;dev_lock);
+	if (init_done(zram)) {
+		pr_info(&quot;Can&#x27;t setup backing device for initialized device\n&quot;);
+		err = -EBUSY;
+		goto out;
+	}
+
+	strscpy(file_name, buf, PATH_MAX);
+	/* ignore trailing newline */
+	sz = strlen(file_name);
+	if (sz &gt; 0 &amp;&amp; file_name[sz - 1] == &#x27;\n&#x27;)
+		file_name[sz - 1] = 0x00;
+
+	backing_dev = filp_open(file_name, O_RDWR | O_LARGEFILE | O_EXCL, 0);
+	if (IS_ERR(backing_dev)) {
+		err = PTR_ERR(backing_dev);
+		backing_dev = NULL;
+		goto out;
+	}
+
+	inode = backing_dev-&gt;f_mapping-&gt;host;
+
+	/* Support only block device in this moment */
+	if (!S_ISBLK(inode-&gt;i_</pre></body></html>
