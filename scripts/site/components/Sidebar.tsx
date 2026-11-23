@@ -42,7 +42,7 @@ export function Sidebar(props: {
           {navGroups.map((group, groupIdx) => (
             <li key={group.title}>
               <details open data-nav-group={String(groupIdx)}>
-                <summary class="font-mono text-xs font-bold uppercase tracking-wider text-base-content/80">
+                <summary class="font-mono text-xs font-bold uppercase tracking-wider text-base-content">
                   {group.title}
                 </summary>
                 <ul class="mt-1 space-y-0.5">
@@ -62,13 +62,13 @@ export function Sidebar(props: {
                       <li key={item.outRelHtmlPath}>
                         <a
                           href={href}
-                          class={`flex items-baseline gap-2 text-sm leading-snug py-2 ${
+                          class={`flex items-baseline gap-2 text-sm leading-snug py-2 text-base-content ${
                             isActive
                               ? "active font-semibold border-l-2 border-primary"
                               : ""
                           }`}
                         >
-                          <span class="font-mono text-xs text-base-content/60 shrink-0">
+                          <span class="font-mono text-xs font-semibold text-primary shrink-0">
                             {numPrefix}
                           </span>
                           <span>{cleanTitle}</span>

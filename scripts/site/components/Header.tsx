@@ -51,7 +51,7 @@ export function Header(props: { currentPage: PageEntry; homeHref: string }) {
                 zmem
               </a>
             </li>
-            <li class="font-mono text-base-content/80">
+            <li class="font-mono text-base-content">
               {currentPage.repoRelPath}
             </li>
           </ul>
@@ -83,8 +83,8 @@ export function Header(props: { currentPage: PageEntry; homeHref: string }) {
                   href={href}
                   class={
                     isSectionActive
-                      ? "bg-base-200 text-base-content font-semibold border border-base-300"
-                      : "text-base-content/85 hover:text-base-content"
+                      ? "bg-base-200 text-primary font-bold border border-base-300"
+                      : "text-base-content hover:text-primary"
                   }
                 >
                   {item.label}

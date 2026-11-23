@@ -9,15 +9,15 @@ export function TableOfContents(props: { headings: TocHeading[] }) {
   return (
     <aside class="hidden xl:block sticky top-16 h-[calc(100vh-4rem)] w-72 shrink-0 border-l border-base-300 px-4 py-8 overflow-y-auto">
       <ul class="menu menu-sm w-full p-0 gap-0.5">
-        <li class="menu-title font-mono text-xs uppercase tracking-wider text-base-content/80">
+        <li class="menu-title font-mono text-xs uppercase tracking-wider text-base-content">
           On This Page
         </li>
         {headings.map((h) => (
           <li key={h.slug} class={h.level === 3 ? "pl-3" : ""}>
             <a
               href={`#${h.slug}`}
-              class={`text-sm leading-snug py-1.5 ${
-                h.level === 2 ? "font-medium" : "text-base-content/80"
+              class={`text-sm leading-snug py-1.5 text-base-content ${
+                h.level === 2 ? "font-semibold" : "font-normal"
               }`}
             >
               {h.text}
